@@ -1,9 +1,13 @@
 import base64
 import os
 import sys
+from operator import itemgetter
 from typing import Optional
+
 from dotenv import load_dotenv
-from openai import OpenAI
+from langchain.prompts import ChatPromptTemplate
+from langchain.schema import StrOutputParser
+from langchain_openai import ChatOpenAI
 from traceloop.sdk import Traceloop
 
 
@@ -29,9 +33,13 @@ def configure_otlp_for_langfuse() -> Optional[str]:
 
 def setup_traceloop() -> None:
     auth = configure_otlp_for_langfuse()
+    if not auth:
+        print("Tracing skipped: Langfuse OTLP auth not configured.")
+        return
     # disable_batch=True to flush immediately in short-lived containers
+    app_name = os.getenv("APP_NAME", "app4-openllmetry")
     Traceloop.init(
-        app_name=os.getenv("APP_NAME", "app3-openllmetry"),
+        app_name=app_name,
         disable_batch=True,
         api_endpoint=os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
         headers={"Authorization": f"Basic {auth}"},
