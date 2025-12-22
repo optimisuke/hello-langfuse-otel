@@ -1,9 +1,17 @@
 services:
-  app:
-    build: .
+  app1:
+    build: ./app1
     env_file:
-      - .env
-    stdin_open: true # needed for interactive chat
+      - ./app1/.env
+    stdin_open: true
+    tty: true
+    depends_on:
+      - langfuse-web
+  app2:
+    build: ./app2
+    env_file:
+      - ./app2/.env
+    stdin_open: true
     tty: true
     depends_on:
       - langfuse-web
