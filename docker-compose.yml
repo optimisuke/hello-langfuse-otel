@@ -21,6 +21,8 @@ services:
       - ./app3/.env
     stdin_open: true
     tty: true
+    environment:
+      LANGFUSE_BASE_URL: http://langfuse-web:3000
     depends_on:
       - langfuse-web
   langfuse-worker:
