@@ -1,9 +1,11 @@
 import os
 import sys
-from typing import List, Optional
+from operator import itemgetter
+from typing import Optional
 
 from dotenv import load_dotenv
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain.prompts import ChatPromptTemplate
+from langchain.schema import StrOutputParser
 from langchain_openai import ChatOpenAI
 from langfuse.callback import CallbackHandler
 
@@ -20,45 +22,10 @@ def build_langfuse_handler() -> Optional[CallbackHandler]:
     return CallbackHandler(public_key=public_key, secret_key=secret_key, host=host)
 
 
-def build_model(langfuse_handler: Optional[CallbackHandler]) -> ChatOpenAI:
-    callbacks = [langfuse_handler] if langfuse_handler else None
+def build_model() -> ChatOpenAI:
     model_name = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
     temperature = float(os.getenv("OPENAI_TEMPERATURE", "0.2"))
-    return ChatOpenAI(
-        model=model_name,
-        temperature=temperature,
-        callbacks=callbacks,
-    )
-
-
-def chat_loop(model: ChatOpenAI, langfuse_handler: Optional[CallbackHandler]) -> None:
-    messages: List = [
-        SystemMessage(
-            content="You are a concise assistant in a telemetry demo. Keep responses short and helpful."
-        )
-    ]
-
-    print("Type 'exit' or 'quit' to stop.")
-    while True:
-        try:
-            user_text = input("You: ").strip()
-        except (EOFError, KeyboardInterrupt):
-            print("\nStopping chat.")
-            break
-
-        if not user_text:
-            continue
-
-        if user_text.lower() in {"exit", "quit"}:
-            break
-
-        messages.append(HumanMessage(user_text))
-        ai_message: AIMessage = model.invoke(messages, config={"run_name": "chat-demo"})
-        messages.append(ai_message)
-        print(f"Bot: {ai_message.content}")
-
-    if langfuse_handler:
-        langfuse_handler.flush()
+    return ChatOpenAI(model=model_name, temperature=temperature)
 
 
 def main() -> None:
@@ -66,12 +33,45 @@ def main() -> None:
     langfuse_handler = build_langfuse_handler()
 
     try:
-        model = build_model(langfuse_handler)
+        model = build_model()
     except Exception as exc:
         print(f"Could not start ChatOpenAI. Check your OpenAI credentials: {exc}")
         sys.exit(1)
 
-    chat_loop(model, langfuse_handler)
+    # チェーンを組んで、invoke時に callbacks をまとめて渡す
+    prompt1 = ChatPromptTemplate.from_template("{person} はどの都市の出身？")
+    prompt2 = ChatPromptTemplate.from_template(
+        "その都市 {city} はどの国？回答は {language} で簡潔に。"
+    )
+    chain1 = prompt1 | model | StrOutputParser()
+    chain2 = (
+        {"city": chain1, "language": itemgetter("language")}
+        | prompt2
+        | model
+        | StrOutputParser()
+    )
+
+    print("Type 'exit' or 'quit' to stop.")
+    while True:
+        try:
+            person = input("Person: ").strip()
+            if person.lower() in {"exit", "quit"}:
+                break
+        except (EOFError, KeyboardInterrupt):
+            print("\nStopping chat.")
+            break
+
+        config = {"run_name": "chain2-two-step"}
+        if langfuse_handler:
+            # Langfuse のコールバックをチェーン全体に適用
+            config["callbacks"] = [langfuse_handler]
+
+        answer = chain2.invoke({"person": person, "language": "日本語"}, config=config)
+        print(f"Answer: {answer}")
+
+    # Langfuse 送信を待たずに終了するのを防ぐためflush
+    if langfuse_handler:
+        langfuse_handler.flush()
 
 
 if __name__ == "__main__":
