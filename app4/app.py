@@ -39,23 +39,51 @@ def setup_traceloop() -> None:
     print("Traceloop initialized (OpenLLMetry OTEL export).")
 
 
-def run_chat() -> None:
-    client = OpenAI()
-    resp = client.chat.completions.create(
-        messages=[{"role": "user", "content": "LLM Observabilityって何？"}],
-        model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
-    )
-    print(resp)
+def build_model() -> ChatOpenAI:
+    model_name = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+    temperature = float(os.getenv("OPENAI_TEMPERATURE", "0.2"))
+    return ChatOpenAI(model=model_name, temperature=temperature)
 
 
 def main() -> None:
     load_dotenv()
-    if not os.getenv("OPENAI_API_KEY"):
-        print("OPENAI_API_KEY not set.")
+    setup_traceloop()
+
+    try:
+        model = build_model()
+    except Exception as exc:
+        print(
+            f"Could not start ChatOpenAI. Check your OpenAI credentials: {exc}")
         sys.exit(1)
 
-    setup_traceloop()
-    run_chat()
+    # チェーンを組んで、invoke時に callbacks をまとめて渡す
+    prompt1 = ChatPromptTemplate.from_template("{person} はどの都市の出身？")
+    prompt2 = ChatPromptTemplate.from_template(
+        "その都市 {city} はどの国？回答は {language} で簡潔に。"
+    )
+    chain1 = prompt1 | model | StrOutputParser()
+    chain2 = (
+        {"city": chain1, "language": itemgetter("language")}
+        | prompt2
+        | model
+        | StrOutputParser()
+    )
+
+    print("Type 'exit' or 'quit' to stop.")
+    while True:
+        try:
+            person = input("Person: ").strip()
+            if person.lower() in {"exit", "quit"}:
+                break
+        except (EOFError, KeyboardInterrupt):
+            print("\nStopping chat.")
+            break
+
+        config = {"run_name": "app4-two-step"}
+
+        answer = chain2.invoke(
+            {"person": person, "language": "日本語"}, config=config)
+        print(f"Answer: {answer}")
 
 
 if __name__ == "__main__":
