@@ -23,10 +23,10 @@ uv run python app.py
 ## Docker Compose で実行
 ```bash
 cp .env.example .env  # キーを書き換える
-docker compose build
-docker compose run --rm app
+docker compose up --build app
 ```
-`stdin_open: true` と `tty: true` を設定しているので、対話的にチャットできます。終了時は `exit` / `quit`。
+`stdin_open: true` と `tty: true` を設定しているので、対話的にチャットできます。終了時は `exit` / `quit`。  
+一時的なコンテナで都度実行したい場合は `docker compose run --rm app` でも動きます。
 
 ## メモ
 - デフォルトモデルは `gpt-4o-mini`。`OPENAI_MODEL` で上書きできます。
