@@ -5,19 +5,19 @@
 ## ざっくり概要
 
 - Langfuse 自己ホスト (langfuse-web / langfuse-worker / Postgres / Redis / MinIO / ClickHouse) を公式 docker-compose ベースで起動。
-- Python アプリを 4 バリアントに分割し、Langfuse へのトレース送信方法を比較。
+- Python アプリを 4 つの構成パターンで用意し、Langfuse へのトレース送信方法を比較。
   - app1: LangChain + OpenAI（基本形）
   - app2: LangChain チェーンにまとめてコールバック渡し
-  - app3: OpenAI 素の Chat API + Traceloop (OpenLLMetry) で OTLP を Langfuse ingest に送信
-  - app4: LangChain 二段プロンプト + Traceloop (OpenLLMetry) で OTLP を Langfuse ingest に送信
+  - app3: OpenAI 素の Chat API + Traceloop (OpenLLMetry) でトレースを OTLP 送信
+  - app4: LangChain 二段プロンプト + Traceloop (OpenLLMetry) でトレースを OTLP 送信
 - app3/4 は Traceloop.init で OTLP エンドポイントと Basic 認証ヘッダーを Langfuse に設定し、環境変数だけでトレースを飛ばす最小構成。`TRACELOOP_API_KEY` や独自の APP_NAME 指定は不要にした。
 
 ## 感想・気づき
 
-- Docker Compose が思ったよりややこしい。Langfuse スタックは ClickHouse/MinIO/Redis/Postgres に依存するので待ち条件が多い。
+- Docker Compose は依存サービスが多く、思ったよりややこしい。
 - ClickHouse を初使用。公式いわく “ClickHouse is the fastest and most resource efficient real-time data warehouse and open-source database.”
-- OpenLLMetry で OTLP を Langfuse に飛ばせたのが好み。最初に環境変数を用意するだけで送信できる。
-- ただし OpenLLMetry/Traceloop 側の制約や Langfuse OTEL ingest 周りはもう少し確認したい。
+- OpenLLMetry でトレースを OTLP 送信できたのがよかった。環境変数の準備だけで送れる。
+- OpenLLMetry/Traceloop の制約や Langfuse 側の受信まわりは、もう少し掘りたい。
 
 ## 図 (Mermaid)
 
@@ -59,7 +59,7 @@ flowchart LR
     H1["Langfuse CallbackHandler"]
   end
   H1 -.callbacks on model invoke.-> M1
-  M1 -->|invoke| LF[(Langfuse ingest)]
+  M1 -->|invoke| LF[(Langfuse)]
 ```
 
 ```mermaid
@@ -68,7 +68,7 @@ flowchart LR
     H2["Langfuse CallbackHandler"]
     C2["chain2<br/>(Prompt1 -> Model -> Prompt2 -> Model)"]
   end
-  H2 -.callbacks on chain invoke.-> C2 -->|invoke| LF[(Langfuse ingest)]
+  H2 -.callbacks on chain invoke.-> C2 -->|invoke| LF[(Langfuse)]
 ```
 
 ```mermaid
@@ -77,7 +77,7 @@ flowchart LR
     TL3["Traceloop.init"]
     OA3["OpenAI Chat API"]
   end
-  TL3 -.once at startup.-> OA3 -->|OTLP export| LF[(Langfuse ingest)]
+  TL3 -.once at startup.-> OA3 -->|OTLP export| LF[(Langfuse)]
 ```
 
 ```mermaid
@@ -86,7 +86,7 @@ flowchart LR
     TL4["Traceloop.init"]
     C4["LangChain chain<br/>(prompt1 -> model -> prompt2 -> model)"]
   end
-  TL4 -.once at startup.-> C4 -->|OTLP export| LF[(Langfuse ingest)]
+  TL4 -.once at startup.-> C4 -->|OTLP export| LF[(Langfuse)]
 ```
 
 ## コアコード抜粋
