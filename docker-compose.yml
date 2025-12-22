@@ -25,6 +25,16 @@ services:
       LANGFUSE_BASE_URL: http://langfuse-web:3000
     depends_on:
       - langfuse-web
+  app4:
+    build: ./app4
+    env_file:
+      - ./app4/.env
+    stdin_open: true
+    tty: true
+    environment:
+      LANGFUSE_BASE_URL: http://langfuse-web:3000
+    depends_on:
+      - langfuse-web
   langfuse-worker:
     image: docker.io/langfuse/langfuse-worker:3
     restart: always
